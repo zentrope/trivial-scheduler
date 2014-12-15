@@ -1,0 +1,100 @@
+* trivial-scheduler
+
+A set of functions that take a crontab-like data structure and a time
+and return what tasks can be run.
+
+** Usage
+
+For now, here's just the basic interaction with a function that takes
+the "spec" (or crontab) and a time and returns a list of values
+representing tasks, events, data -- whatever.
+
+#+begin_src clojure
+  (ns my.app
+    (:require
+      [trivial-scheduler.core :as ts]
+      [clj-time.core :as t]))
+
+  (def specs
+    [{:minute [5]            :task [:five-after-hour]}
+     {:minute [59]           :task [:minute-before-hour]}
+     {:minute [:periodic 5]  :task [:every-05-minutes]}
+     {:minute [:periodic 3]  :task [:every-03-minutes]}
+     {:minute [:periodic 10] :task [:every-10-minutes]}])
+
+  (def crontab
+    (ts/compile specs))
+
+  (def an-hour
+    (partial t/date-time 2015 01 01 01))
+
+  ;; The idea is that you pass in a time (joda DateTime only for now)
+  ;; and get back the tasks to be run. Creating a periodic loop is up
+  ;; to you (or some other library).
+
+   > (tasks-to-run crontab (an-hour 05))
+  [[:five-after-hour]
+   [:every-05-minutes]]
+
+   > (tasks-to-run crontab (an-hour (* 3 15)))
+  [[:every-05-minutes]
+   [:every-03-minutes]]
+
+   > (tasks-to-run crontab (an-hour 59))
+  [[:minute-before-hour]]
+#+end_src
+
+My assumption is that you write your own loop that calls this function
+with your defined spec once a minute and then acts accordingly on the
+returned values.
+
+** Spec
+
+It's just a vector of maps with the following keys:
+
+ - *:minute* -- a vector of the minutes of the hour to run the task [0-59].
+ - *:hour* -- a vector of the hours in a given day to run the task [0-23]
+ - *:month* --  a vector of the months in the year to run the task [1-12]
+ - *:date* -- a vector of days of the month to run the task [1-31].
+ - *:day* -- a vector of the days of the week to run the task [1-7].
+ - *:task* -- a vector (tuple) containing a value returned to you when
+   the time is right.
+
+Each vector is in the form for a sequence of numbers:
+
+#+begin_src clojure
+[ {:minute [0 20 40] :task [:ping "127.0.0.1"]} ]
+#+end_src
+
+and, alternatively, you can use the =:periodic= keyword as a shortcut:
+
+#+begin_src clojure
+[ {:minute [:periodic 20] :task [:ping "127.0.0.1"]} ]
+#+end_src
+
+By default, the task value will be returned every minute of every
+day. When you write a spec, you're overriding the defaults to be more
+selective.
+
+For instance:
+
+#+begin_src clojure
+{:minute [23] :hour [19] :month [10] :date [31] :task [:happy-halloween]}
+#+end_src
+
+will return =[:happy-halloween]= at 7:23 PM on October 31st.
+
+** Undone
+
+ - Tasks should be "values". It's up to the caller to determine what
+   that value means.
+
+ - Provide a simple core/async style daemon. You pass in a spec and a
+   channel and the daemon will poll once a minute for you.
+
+** License
+
+Copyright (c) 2014-2015 Keith Irwin
+
+Distributed under the Eclipse Public License either version 1.0 or (at
+your option) any later version.
